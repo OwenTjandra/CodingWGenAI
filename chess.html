@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#15171c;
+    --panel:#1d2027;
+    --line:#2c303a;
+    --light:#e9e2d0;     /* light squares */
+    --dark:#5a6b6e;      /* dark squares  */
+    --accent:#e0a73a;    /* gold highlight */
+    --move:#7fb069;      /* legal-move dot */
+    --check:#d9534f;     /* king in check  */
+    --text:#e7e9ee;
+    --muted:#8a8f9c;
+    --white-piece:#f7f4ec;
+    --black-piece:#23262d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #20242c 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family:"JetBrains Mono",monospace;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 16px 60px;
+  }
+  h1{
+    font-family:"Cormorant Garamond",serif;
+    font-weight:600;
+    font-size:48px;
+    letter-spacing:2px;
+    margin-bottom:4px;
+  }
+  .sub{color:var(--muted);font-size:13px;letter-spacing:1px;margin-bottom:24px}
+  .status{
+    font-size:14px;letter-spacing:.5px;margin-bottom:14px;height:20px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--white-piece);box-shadow:0 0 0 1px var(--line)}
+  .dot.black{background:var(--black-piece)}
+  .board-wrap{
+    position:relative;
+    padding:22px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.6);
+  }
+  #board{
+    display:grid;
+    grid-template-columns:repeat(8,64px);
+    grid-template-rows:repeat(8,64px);
+    border-radius:4px;
+    overflow:hidden;
+    border:1px solid #0e0f12;
+  }
+  .sq{
+    position:relative;
+    display:flex;align-items:center;justify-content:center;
+    font-size:42px;line-height:1;cursor:pointer;
+    user-select:none;
+    transition:background .12s;
+  }
+  .sq.light{background:var(--light)}
+  .sq.dark{background:var(--dark)}
+  .piece.white{color:var(--white-piece);text-shadow:0 1px 1px rgba(0,0,0,.35)}
+  .piece.black{color:var(--black-piece);text-shadow:0 1px 0 rgba(255,255,255,.12)}
+  .sq.selected{box-shadow:inset 0 0 0 4px var(--accent)}
+  .sq.lastmove::after{
+    content:"";position:absolute;inset:0;background:var(--accent);opacity:.18;pointer-events:none;
+  }
+  .sq.check{box-shadow:inset 0 0 0 4px var(--check)}
+  .hint{
+    position:absolute;width:18px;height:18px;border-radius:50%;
+    background:var(--move);opacity:.65;pointer-events:none;
+  }
+  .hint.capture{
+    width:100%;height:100%;border-radius:0;background:none;opacity:1;
+    box-shadow:inset 0 0 0 4px var(--move);
+  }
+  .coord{position:absolute;font-size:9px;color:rgba(0,0,0,.4);font-family:"JetBrains Mono"}
+  .coord.file{bottom:2px;right:4px}
+  .coord.rank{top:2px;left:4px}
+  .sq.dark .coord{color:rgba(255,255,255,.45)}
+  .controls{margin-top:22px;display:flex;gap:12px}
+  button{
+    font-family:"JetBrains Mono";font-size:13px;letter-spacing:.5px;
+    color:var(--text);background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;
+    padding:10px 18px;cursor:pointer;transition:.15s;
+  }
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  .captured{display:flex;gap:14px;margin-top:16px;font-size:24px;min-height:30px}
+  .cap-row{display:flex;align-items:center;gap:2px;min-height:30px}
+  .cap-label{font-size:11px;color:var(--muted);align-self:center;margin-right:6px}
+  /* promotion modal */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    display:none;align-items:center;justify-content:center;z-index:10;
+  }
+  .overlay.show{display:flex}
+  .promo{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:24px;text-align:center;
+  }
+  .promo p{font-size:13px;color:var(--muted);margin-bottom:16px;letter-spacing:.5px}
+  .promo-pieces{display:flex;gap:8px}
+  .promo-pieces div{
+    width:64px;height:64px;display:flex;align-items:center;justify-content:center;
+    font-size:42px;border:1px solid var(--line);border-radius:8px;cursor:pointer;
+    background:var(--light);color:var(--black-piece);transition:.12s;
+  }
+  .promo-pieces div:hover{box-shadow:inset 0 0 0 4px var(--accent)}
+</style>
+</head>
+<body>
+  <h1>Chess</h1>
+  <div class="sub">OBJECT-ORIENTED · 2D ARRAY ENGINE</div>
+  <div class="status" id="status"></div>
+
+  <div class="board-wrap">
+    <div id="board"></div>
+  </div>
+
+  <div class="captured">
+    <div class="cap-row"><span class="cap-label">WHITE TOOK</span><span id="capByWhite"></span></div>
+    <div class="cap-row"><span class="cap-label">BLACK TOOK</span><span id="capByBlack"></span></div>
+  </div>
+
+  <div class="controls">
+    <button id="newGame">New Game</button>
+    <button id="flip">Flip Board</button>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="promo">
+      <p>PROMOTE PAWN TO</p>
+      <div class="promo-pieces" id="promoPieces"></div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   GLYPHS — Unicode symbols keyed by color + type
+   ============================================================ */
+const GLYPH = {
+  white:{ K:"\u2654", Q:"\u2655", R:"\u2656", B:"\u2657", N:"\u2658", P:"\u2659" },
+  black:{ K:"\u265A", Q:"\u265B", R:"\u265C", B:"\u265D", N:"\u265E", P:"\u265F" }
+};
+
+/* ============================================================
+   PIECE — abstract base class.
+   Every concrete piece is a subclass that overrides getMoves().
+   getMoves returns PSEUDO-legal moves (ignores leaving own king
+   in check); the Game class filters those out.
+   ============================================================ */
+class Piece {
+  constructor(color){
+    this.color = color;           // "white" | "black"
+    this.type  = "?";             // set by subclass: K Q R B N P
+    this.hasMoved = false;        // needed for castling & pawn double-step
+  }
+  get symbol(){ return GLYPH[this.color][this.type]; }
+  get opponent(){ return this.color === "white" ? "black" : "white"; }
+
+  // Subclasses implement this. Returns array of {r,c} target squares.
+  getMoves(board, r, c){ return []; }
+
+  // Helper: walk in straight-line directions until blocked.
+  slide(board, r, c, directions){
+    const moves = [];
+    for(const [dr,dc] of directions){
+      let nr = r + dr, nc = c + dc;
+      while(board.inBounds(nr,nc)){
+        const target = board.get(nr,nc);
+        if(target === null){
+          moves.push({r:nr,c:nc});           // empty -> can move
+        } else {
+          if(target.color !== this.color)
+            moves.push({r:nr,c:nc});         // enemy -> can capture, then stop
+          break;                             // blocked either way
+        }
+        nr += dr; nc += dc;
+      }
+    }
+    return moves;
+  }
+}
+
+class Pawn extends Piece {
+  constructor(color){ super(color); this.type = "P"; }
+  getMoves(board, r, c){
+    const moves = [];
+    const dir   = this.color === "white" ? -1 : 1;   // white moves up the array
+    const startRow = this.color === "white" ? 6 : 1;
+
+    // forward one
+    if(board.inBounds(r+dir,c) && board.get(r+dir,c) === null){
+      moves.push({r:r+dir,c});
+      // forward two from start
+      if(r === startRow && board.get(r+2*dir,c) === null)
+        moves.push({r:r+2*dir,c});
+    }
+    // diagonal captures (incl. en passant)
+    for(const dc of [-1,1]){
+      const nr = r+dir, nc = c+dc;
+      if(!board.inBounds(nr,nc)) continue;
+      const target = board.get(nr,nc);
+      if(target && target.color !== this.color){
+        moves.push({r:nr,c:nc});
+      } else if(board.enPassant && board.enPassant.r === nr && board.enPassant.c === nc){
+        moves.push({r:nr,c:nc,enPassant:true});
+      }
+    }
+    return moves;
+  }
+}
+
+class Knight extends Piece {
+  constructor(color){ super(color); this.type = "N"; }
+  getMoves(board, r, c){
+    const offsets = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+    const moves = [];
+    for(const [dr,dc] of offsets){
+      const nr=r+dr, nc=c+dc;
+      if(!board.inBounds(nr,nc)) continue;
+      const t = board.get(nr,nc);
+      if(t === null || t.color !== this.color) moves.push({r:nr,c:nc});
+    }
+    return moves;
+  }
+}
+
+class Bishop extends Piece {
+  constructor(color){ super(color); this.type = "B"; }
+  getMoves(board, r, c){
+    return this.slide(board,r,c,[[-1,-1],[-1,1],[1,-1],[1,1]]);
+  }
+}
+
+class Rook extends Piece {
+  constructor(color){ super(color); this.type = "R"; }
+  getMoves(board, r, c){
+    return this.slide(board,r,c,[[-1,0],[1,0],[0,-1],[0,1]]);
+  }
+}
+
+class Queen extends Piece {
+  constructor(color){ super(color); this.type = "Q"; }
+  getMoves(board, r, c){
+    return this.slide(board,r,c,
+      [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]]);
+  }
+}
+
+class King extends Piece {
+  constructor(color){ super(color); this.type = "K"; }
+  getMoves(board, r, c){
+    const moves = [];
+    for(let dr=-1;dr<=1;dr++)
+      for(let dc=-1;dc<=1;dc++){
+        if(dr===0 && dc===0) continue;
+        const nr=r+dr, nc=c+dc;
+        if(!board.inBounds(nr,nc)) continue;
+        const t = board.get(nr,nc);
+        if(t === null || t.color !== this.color) moves.push({r:nr,c:nc});
+      }
+    // Castling — only generated as a candidate; Game verifies king safety.
+    if(!this.hasMoved && !board.isAttacked(r,c,this.opponent)){
+      // king-side (toward col 7)
+      const ksRook = board.get(r,7);
+      if(ksRook instanceof Rook && !ksRook.hasMoved &&
+         board.get(r,5)===null && board.get(r,6)===null &&
+         !board.isAttacked(r,5,this.opponent) && !board.isAttacked(r,6,this.opponent)){
+        moves.push({r, c:6, castle:"king"});
+      }
+      // queen-side (toward col 0)
+      const qsRook = board.get(r,0);
+      if(qsRook instanceof Rook && !qsRook.hasMoved &&
+         board.get(r,1)===null && board.get(r,2)===null && board.get(r,3)===null &&
+         !board.isAttacked(r,3,this.opponent) && !board.isAttacked(r,2,this.opponent)){
+        moves.push({r, c:2, castle:"queen"});
+      }
+    }
+    return moves;
+  }
+}
+
+/* ============================================================
+   BOARD — wraps the 8x8 2D array and low-level queries.
+   grid[row][col] : row 0 = rank 8 (top), row 7 = rank 1 (bottom)
+   ============================================================ */
+class Board {
+  constructor(){
+    this.grid = Array.from({length:8}, () => new Array(8).fill(null));
+    this.enPassant = null;        // {r,c} square that can be captured en passant
+  }
+
+  inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+  get(r,c){ return this.grid[r][c]; }
+  set(r,c,piece){ this.grid[r][c] = piece; }
+
+  setup(){
+    const back = [Rook,Knight,Bishop,Queen,King,Bishop,Knight,Rook];
+    for(let c=0;c<8;c++){
+      this.grid[0][c] = new back[c]("black");
+      this.grid[1][c] = new Pawn("black");
+      this.grid[6][c] = new Pawn("white");
+      this.grid[7][c] = new back[c]("white");
+    }
+  }
+
+  findKing(color){
+    for(let r=0;r<8;r++)
+      for(let c=0;c<8;c++){
+        const p = this.grid[r][c];
+        if(p instanceof King && p.color === color) return {r,c};
+      }
+    return null;
+  }
+
+  // Is square (r,c) attacked by any piece of `byColor`?
+  // Computed directly (not via getMoves) so pawn attacks are handled right.
+  isAttacked(r,c,byColor){
+    const dir = byColor === "white" ? -1 : 1;       // pawns of byColor sit "behind"
+    // pawn attacks: a byColor pawn at (r-dir, c±1) attacks (r,c)
+    for(const dc of [-1,1]){
+      const pr = r - dir, pc = c + dc;
+      if(this.inBounds(pr,pc)){
+        const p = this.grid[pr][pc];
+        if(p instanceof Pawn && p.color === byColor) return true;
+      }
+    }
+    // knight
+    for(const [dr,dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]){
+      const nr=r+dr, nc=c+dc;
+      if(this.inBounds(nr,nc)){
+        const p=this.grid[nr][nc];
+        if(p instanceof Knight && p.color===byColor) return true;
+      }
+    }
+    // king (adjacent)
+    for(let dr=-1;dr<=1;dr++)
+      for(let dc=-1;dc<=1;dc++){
+        if(!dr && !dc) continue;
+        const nr=r+dr, nc=c+dc;
+        if(this.inBounds(nr,nc)){
+          const p=this.grid[nr][nc];
+          if(p instanceof King && p.color===byColor) return true;
+        }
+      }
+    // sliding: diagonals -> bishop/queen ; straights -> rook/queen
+    const rays = [
+      {dirs:[[-1,-1],[-1,1],[1,-1],[1,1]], types:[Bishop,Queen]},
+      {dirs:[[-1,0],[1,0],[0,-1],[0,1]],   types:[Rook,Queen]}
+    ];
+    for(const ray of rays){
+      for(const [dr,dc] of ray.dirs){
+        let nr=r+dr, nc=c+dc;
+        while(this.inBounds(nr,nc)){
+          const p=this.grid[nr][nc];
+          if(p){
+            if(p.color===byColor && ray.types.some(T=>p instanceof T)) return true;
+            break;
+          }
+          nr+=dr; nc+=dc;
+        }
+      }
+    }
+    return false;
+  }
+}
+
+/* ============================================================
+   GAME — orchestrates rules, turns, rendering and interaction.
+   ============================================================ */
+class Game {
+  constructor(rootEl){
+    this.boardEl   = rootEl;
+    this.statusEl  = document.getElementById("status");
+    this.capWhiteEl= document.getElementById("capByWhite");
+    this.capBlackEl= document.getElementById("capByBlack");
+    this.flipped   = false;
+    this.reset();
+    this.boardEl.addEventListener("click", e => this.onClick(e));
+  }
+
+  reset(){
+    this.board = new Board();
+    this.board.setup();
+    this.turn = "white";
+    this.selected = null;          // {r,c}
+    this.legal = [];               // legal moves for the selected piece
+    this.lastMove = null;          // {from,to}
+    this.captured = {white:[], black:[]};
+    this.gameOver = false;
+    this.render();
+  }
+
+  /* ---- legal-move filtering: a pseudo-move is legal only if it
+         does NOT leave the mover's own king in check. ---- */
+  legalMovesFor(r,c){
+    const piece = this.board.get(r,c);
+    if(!piece) return [];
+    const pseudo = piece.getMoves(this.board, r, c);
+    return pseudo.filter(m => !this.leavesKingInCheck(r,c,m,piece.color));
+  }
+
+  // Simulate the move on the real board, test king safety, then undo.
+  leavesKingInCheck(r,c,move,color){
+    const b = this.board;
+    const moving = b.get(r,c);
+    const captured = b.get(move.r,move.c);
+    let epCaptured=null, epPos=null;
+
+    // apply
+    b.set(move.r,move.c,moving);
+    b.set(r,c,null);
+    if(move.enPassant){
+      epPos = {r:r, c:move.c};               // captured pawn sits on mover's row
+      epCaptured = b.get(epPos.r,epPos.c);
+      b.set(epPos.r,epPos.c,null);
+    }
+
+    const kingPos = b.findKing(color);
+    const inCheck = b.isAttacked(kingPos.r,kingPos.c, color==="white"?"black":"white");
+
+    // undo
+    b.set(r,c,moving);
+    b.set(move.r,move.c,captured);
+    if(epPos) b.set(epPos.r,epPos.c,epCaptured);
+
+    return inCheck;
+  }
+
+  onClick(e){
+    if(this.gameOver) return;
+    const cell = e.target.closest(".sq");
+    if(!cell) return;
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    const piece = this.board.get(r,c);
+
+    // clicking a legal destination -> move
+    if(this.selected){
+      const move = this.legal.find(m => m.r===r && m.c===c);
+      if(move){ this.makeMove(this.selected.r,this.selected.c,move); return; }
+    }
+    // otherwise (re)select your own piece
+    if(piece && piece.color === this.turn){
+      this.selected = {r,c};
+      this.legal = this.legalMovesFor(r,c);
+    } else {
+      this.selected = null; this.legal = [];
+    }
+    this.render();
+  }
+
+  makeMove(r,c,move){
+    const b = this.board;
+    const piece = b.get(r,c);
+
+    // capture (normal or en passant)
+    let captured = b.get(move.r,move.c);
+    if(move.enPassant){
+      captured = b.get(r,move.c);
+      b.set(r,move.c,null);
+    }
+    if(captured) this.captured[piece.color].push(captured.symbol);
+
+    // move the piece
+    b.set(move.r,move.c,piece);
+    b.set(r,c,null);
+    piece.hasMoved = true;
+
+    // castling: also move the rook
+    if(move.castle === "king"){
+      const rook=b.get(move.r,7); b.set(move.r,5,rook); b.set(move.r,7,null); rook.hasMoved=true;
+    } else if(move.castle === "queen"){
+      const rook=b.get(move.r,0); b.set(move.r,3,rook); b.set(move.r,0,null); rook.hasMoved=true;
+    }
+
+    // set / clear en-passant target
+    if(piece instanceof Pawn && Math.abs(move.r - r) === 2){
+      b.enPassant = {r:(move.r+r)/2, c};
+    } else {
+      b.enPassant = null;
+    }
+
+    this.lastMove = {from:{r,c}, to:{r:move.r,c:move.c}};
+    this.selected = null; this.legal = [];
+
+    // promotion?
+    if(piece instanceof Pawn && (move.r===0 || move.r===7)){
+      this.promote(move.r, move.c, piece.color);
+      return; // turn switches after the player chooses
+    }
+
+    this.endTurn();
+  }
+
+  promote(r,c,color){
+    const overlay = document.getElementById("overlay");
+    const box = document.getElementById("promoPieces");
+    box.innerHTML = "";
+    const options = {Q:Queen, R:Rook, B:Bishop, N:Knight};
+    for(const key in options){
+      const div = document.createElement("div");
+      div.textContent = GLYPH[color][key];
+      div.onclick = () => {
+        const np = new options[key](color);
+        np.hasMoved = true;
+        this.board.set(r,c,np);
+        overlay.classList.remove("show");
+        this.endTurn();
+      };
+      box.appendChild(div);
+    }
+    overlay.classList.add("show");
+    this.render();
+  }
+
+  endTurn(){
+    this.turn = this.turn === "white" ? "black" : "white";
+    this.checkGameState();
+    this.render();
+  }
+
+  // Does the side to move have any legal move at all?
+  hasAnyLegalMove(color){
+    for(let r=0;r<8;r++)
+      for(let c=0;c<8;c++){
+        const p = this.board.get(r,c);
+        if(p && p.color===color && this.legalMovesFor(r,c).length>0) return true;
+      }
+    return false;
+  }
+
+  checkGameState(){
+    const kingPos = this.board.findKing(this.turn);
+    const inCheck = this.board.isAttacked(kingPos.r,kingPos.c,
+                      this.turn==="white"?"black":"white");
+    const canMove = this.hasAnyLegalMove(this.turn);
+
+    if(!canMove){
+      this.gameOver = true;
+      this.endMessage = inCheck
+        ? `Checkmate — ${this.turn==="white"?"Black":"White"} wins`
+        : "Stalemate — draw";
+    } else {
+      this.inCheck = inCheck;
+    }
+  }
+
+  /* ---- rendering ---- */
+  render(){
+    this.boardEl.innerHTML = "";
+    const rows = this.flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+    const cols = this.flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+
+    const kingInCheckPos = (!this.gameOver && this.inCheck)
+      ? this.board.findKing(this.turn) : null;
+
+    for(const r of rows){
+      for(const c of cols){
+        const sq = document.createElement("div");
+        sq.className = "sq " + ((r+c)%2===0 ? "light" : "dark");
+        sq.dataset.r = r; sq.dataset.c = c;
+
+        // selected highlight
+        if(this.selected && this.selected.r===r && this.selected.c===c)
+          sq.classList.add("selected");
+        // last-move highlight
+        if(this.lastMove &&
+          ((this.lastMove.from.r===r && this.lastMove.from.c===c) ||
+           (this.lastMove.to.r===r && this.lastMove.to.c===c)))
+          sq.classList.add("lastmove");
+        // king in check
+        if(kingInCheckPos && kingInCheckPos.r===r && kingInCheckPos.c===c)
+          sq.classList.add("check");
+
+        // coordinates along the edges
+        if(c === (this.flipped?7:0)){
+          const rk=document.createElement("span");
+          rk.className="coord rank"; rk.textContent=8-r; sq.appendChild(rk);
+        }
+        if(r === (this.flipped?0:7)){
+          const fl=document.createElement("span");
+          fl.className="coord file"; fl.textContent="abcdefgh"[c]; sq.appendChild(fl);
+        }
+
+        // piece glyph
+        const piece = this.board.get(r,c);
+        if(piece){
+          const span=document.createElement("span");
+          span.className="piece "+piece.color;
+          span.textContent=piece.symbol;
+          sq.appendChild(span);
+        }
+
+        // legal-move hints
+        const hint = this.legal.find(m => m.r===r && m.c===c);
+        if(hint){
+          const h=document.createElement("span");
+          h.className="hint"+(this.board.get(r,c)?" capture":"");
+          sq.appendChild(h);
+        }
+
+        this.boardEl.appendChild(sq);
+      }
+    }
+    this.renderStatus();
+    this.capWhiteEl.textContent = this.captured.white.join("");
+    this.capBlackEl.textContent = this.captured.black.join("");
+  }
+
+  renderStatus(){
+    if(this.gameOver){
+      this.statusEl.innerHTML = `<strong>${this.endMessage}</strong>`;
+      return;
+    }
+    const dot = `<span class="dot ${this.turn==='black'?'black':''}"></span>`;
+    const who = this.turn.charAt(0).toUpperCase()+this.turn.slice(1);
+    this.statusEl.innerHTML = dot + `${who} to move` +
+      (this.inCheck ? `  —  <span style="color:var(--check)">CHECK</span>` : "");
+  }
+}
+
+/* ---- bootstrap ---- */
+const game = new Game(document.getElementById("board"));
+document.getElementById("newGame").onclick = () => game.reset();
+document.getElementById("flip").onclick = () => { game.flipped = !game.flipped; game.render(); };
+</script>
+</body>
+</html>
